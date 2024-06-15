@@ -1,0 +1,800 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: SAM Template
+
+Globals:
+  Api:
+    Cors:
+      AllowMethods: "'GET,PUT,POST,DELETE'"
+      AllowHeaders: "'content-type'"
+      AllowOrigin: "'*'"
+  Function:
+    Timeout: 5
+    Runtime: provided.al2023
+    Architectures:
+      - arm64
+    Environment:
+      Variables:
+        SES_ACCESS_KEY_ID: ""
+        SES_ACCESS_SECRET_KEY: ""
+        dbUser: "postgres"
+        dbName: "ascenda"
+        dbHost: "db-dev.cluster-cyzzcyzcqgrq.ap-southeast-1.rds.amazonaws.com"
+        dbPwd: "{{resolve:secretsmanager:arn:aws:secretsmanager:ap-southeast-1:276374573009:secret:rds-dev-0YKFuB:SecretString:password}}"
+
+Parameters:
+  secretName:
+    Default: arn:aws:secretsmanager:ap-southeast-1:276374573009:secret:rds-admin-EtkU6T
+    Description: Database password secret name
+    Type: String
+
+Resources:
+  AscendaGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Cors:
+        AllowMethods: "'GET, POST, PUT, DELETE, OPTIONS'"
+        AllowHeaders: "'Content-Type, X-Amz-Date, Authorization, X-Api-Key, X-Amz-Security-Token'"
+        AllowOrigin: "'*'"
+      Auth:
+        DefaultAuthorizer: CustomAuthorizer1
+        AddDefaultAuthorizerToCorsPreflight: False
+        InvokeRole: arn:aws:iam::276374573009:role/api_gateway_auth_invocation
+        Authorizers:
+          CustomAuthorizer1:
+            FunctionPayloadType: REQUEST
+            FunctionArn: !GetAtt CustomAuthorizer.Arn
+            Identity:
+              Headers:
+                - Authorization
+              ReauthorizeEvery: 0
+      GatewayResponses:
+        DEFAULT_4XX:
+          ResponseParameters:
+            Headers:
+              Access-Control-Allow-Origin: "'*'"
+      # Domain:
+      #   DomainName: itsag1t2.com
+      #   CertificateArn: arn:aws:acm:ap-southeast-1:276374573009:certificate/d72f5e58-096f-4917-a848-14fad7b26d49
+      #   Route53:
+      #     HostedZoneId: Z05937523KU9FR1TMTEUC
+      #     EvaluateTargetHealth: false
+
+  CustomAuthorizer:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
+    Properties:
+      FunctionName: "custom_authorizer"
+      CodeUri: functions/admin/authorizer/
+      Handler: bootstrap
+      Role: !Sub arn:aws:iam::${AWS::AccountId}:role/AscendaUserLambdaRole
+
+  GetPointsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
+    Properties:
+      FunctionName: "get_points"
+      # must refer to the directory containing your main package
+      CodeUri: functions/points/get-points/
+      Handler: bootstrap
+      Policies:
+        - Statement:
+            - Action:
+                # TODO: REMOVE UNNECESSARY PERMISSIONS
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+                - dynamodb:Scan
+                - dynamodb:BatchWriteItem
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DescribeSubnets
+                - ec2:DeleteNetworkInterface
+                - ec2:AssignPrivateIpAddresses
+                - ec2:UnassignPrivateIpAddresses
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                - ssm:GetParameter
+                - secretsmanager:GetResourcePolicy
+                - secretsmanager:GetSecretValue
+                - secretsmanager:DescribeSecret
+                - secretsmanager:ListSecretVersionIds
+                - secretsmanager:ListSecrets
+              Effect: Allow
+              Resource: "*"
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AscendaGateway
+            Path: /points
+            Method: GET
+
+  UpdatePointsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
+    Properties:
+      FunctionName: "update_points"
+      # must refer to the directory containing your main package
+      CodeUri: functions/points/update-points/
+      Handler: bootstrap
+      Policies:
+        - Statement:
+            - Action:
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DescribeSubnets
+                - ec2:DeleteNetworkInterface
+                - ec2:AssignPrivateIpAddresses
+                - ec2:UnassignPrivateIpAddresses
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                - ssm:GetParameter
+                - secretsmanager:GetResourcePolicy
+                - secretsmanager:GetSecretValue
+                - secretsmanager:DescribeSecret
+                - secretsmanager:ListSecretVersionIds
+                - secretsmanager:ListSecrets
+              Effect: Allow
+              Resource: "*"
+
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AscendaGateway
+            Path: /points
+            Method: PUT
+
+  CreatePointsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
+    Properties:
+      FunctionName: "create_points"
+      # must refer to the directory containing your main package
+      CodeUri: functions/points/create-points/
+      Handler: bootstrap
+      Policies:
+        - Statement:
+            - Action:
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DescribeSubnets
+                - ec2:DeleteNetworkInterface
+                - ec2:AssignPrivateIpAddresses
+                - ec2:UnassignPrivateIpAddresses
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                - ssm:GetParameter
+                - secretsmanager:GetResourcePolicy
+                - secretsmanager:GetSecretValue
+                - secretsmanager:DescribeSecret
+                - secretsmanager:ListSecretVersionIds
+                - secretsmanager:ListSecrets
+              Effect: Allow
+              Resource: "*"
+
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AscendaGateway
+            Path: /points
+            Method: POST
+
+  DeletePointsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
+    Properties:
+      FunctionName: "delete_points"
+      # must refer to the directory containing your main package
+      CodeUri: functions/points/delete-points/
+      Handler: bootstrap
+      Policies:
+        - Statement:
+            - Action:
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DescribeSubnets
+                - ec2:DeleteNetworkInterface
+                - ec2:AssignPrivateIpAddresses
+                - ec2:UnassignPrivateIpAddresses
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                - ssm:GetParameter
+                - secretsmanager:GetResourcePolicy
+                - secretsmanager:GetSecretValue
+                - secretsmanager:DescribeSecret
+                - secretsmanager:ListSecretVersionIds
+                - secretsmanager:ListSecrets
+              Effect: Allow
+              Resource: "*"
+
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AscendaGateway
+            Path: /points
+            Method: DELETE
+
+  GetMakerCheckerTransactionsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
+    Properties:
+      FunctionName: "get_transactions"
+      # must refer to the directory containing your main package
+      CodeUri: functions/maker-checker/get-transactions/
+      Handler: bootstrap
+      Policies:
+        - Statement:
+            - Action:
+                # TODO: REMOVE UNNECESSARY PERMISSIONS
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+                - dynamodb:Scan
+                - dynamodb:BatchWriteItem
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DescribeSubnets
+                - ec2:DeleteNetworkInterface
+                - ec2:AssignPrivateIpAddresses
+                - ec2:UnassignPrivateIpAddresses
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                - ssm:GetParameter
+                - secretsmanager:GetResourcePolicy
+                - secretsmanager:GetSecretValue
+                - secretsmanager:DescribeSecret
+                - secretsmanager:ListSecretVersionIds
+                - secretsmanager:ListSecrets
+              Effect: Allow
+              Resource: "*"
+
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AscendaGateway
+            Path: /maker-checker
+            Method: GET
+
+  UpdateMakerCheckerTransactionFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
+    Properties:
+      FunctionName: "update_transaction"
+      # must refer to the directory containing your main package
+      CodeUri: functions/maker-checker/update-transaction/
+      Handler: bootstrap
+      Policies:
+        - Statement:
+            - Action:
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DescribeSubnets
+                - ec2:DeleteNetworkInterface
+                - ec2:AssignPrivateIpAddresses
+                - ec2:UnassignPrivateIpAddresses
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                - ssm:GetParameter
+                - secretsmanager:GetResourcePolicy
+                - secretsmanager:GetSecretValue
+                - secretsmanager:DescribeSecret
+                - secretsmanager:ListSecretVersionIds
+                - secretsmanager:ListSecrets
+              Effect: Allow
+              Resource: "*"
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AscendaGateway
+            Path: /maker-checker
+            Method: PUT
+
+  CreateMakerCheckerTransactionFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
+    Properties:
+      FunctionName: "create_transaction"
+      # must refer to the directory containing your main package
+      CodeUri: functions/maker-checker/create-transaction/
+      Handler: bootstrap
+      Policies:
+        - Statement:
+            - Action:
+                - ses:SendEmail
+                - ses:SendRawEmail
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DescribeSubnets
+                - ec2:DeleteNetworkInterface
+                - ec2:AssignPrivateIpAddresses
+                - ec2:UnassignPrivateIpAddresses
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                - ssm:GetParameter
+                - secretsmanager:GetResourcePolicy
+                - secretsmanager:GetSecretValue
+                - secretsmanager:DescribeSecret
+                - secretsmanager:ListSecretVersionIds
+                - secretsmanager:ListSecrets
+              Effect: Allow
+              Resource: "*"
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AscendaGateway
+            Path: /maker-checker
+            Method: POST
+
+  CreateRoleFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
+    Properties:
+      FunctionName: "create_role"
+      # must refer to the directory containing your main package
+      CodeUri: functions/roles/create-role/
+      Handler: bootstrap
+      Policies:
+        - Statement:
+            - Action:
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DescribeSubnets
+                - ec2:DeleteNetworkInterface
+                - ec2:AssignPrivateIpAddresses
+                - ec2:UnassignPrivateIpAddresses
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                - ssm:GetParameter
+                - secretsmanager:GetResourcePolicy
+                - secretsmanager:GetSecretValue
+                - secretsmanager:DescribeSecret
+                - secretsmanager:ListSecretVersionIds
+                - secretsmanager:ListSecrets
+              Effect: Allow
+              Resource: "*"
+
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AscendaGateway
+            Path: /role
+            Method: POST
+
+  DeleteRoleFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
+    Properties:
+      FunctionName: "delete_role"
+      # must refer to the directory containing your main package
+      CodeUri: functions/roles/delete-role/
+      Handler: bootstrap
+      Policies:
+        - Statement:
+            - Action:
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DescribeSubnets
+                - ec2:DeleteNetworkInterface
+                - ec2:AssignPrivateIpAddresses
+                - ec2:UnassignPrivateIpAddresses
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                - ssm:GetParameter
+                - secretsmanager:GetResourcePolicy
+                - secretsmanager:GetSecretValue
+                - secretsmanager:DescribeSecret
+                - secretsmanager:ListSecretVersionIds
+                - secretsmanager:ListSecrets
+              Effect: Allow
+              Resource: "*"
+
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AscendaGateway
+            Path: /role
+            Method: DELETE
+
+  GetRoleFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
+    Properties:
+      FunctionName: "get_role"
+      # must refer to the directory containing your main package
+      CodeUri: functions/roles/get-role/
+      Handler: bootstrap
+      Policies:
+        - Statement:
+            - Action:
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DescribeSubnets
+                - ec2:DeleteNetworkInterface
+                - ec2:AssignPrivateIpAddresses
+                - ec2:UnassignPrivateIpAddresses
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                - ssm:GetParameter
+                - secretsmanager:GetResourcePolicy
+                - secretsmanager:GetSecretValue
+                - secretsmanager:DescribeSecret
+                - secretsmanager:ListSecretVersionIds
+                - secretsmanager:ListSecrets
+              Effect: Allow
+              Resource: "*"
+
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AscendaGateway
+            Path: /role
+            Method: GET
+
+  GetRolesFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
+    Properties:
+      FunctionName: "get_roles"
+      # must refer to the directory containing your main package
+      CodeUri: functions/roles/get-roles/
+      Handler: bootstrap
+      Policies:
+        - Statement:
+            - Action:
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DescribeSubnets
+                - ec2:DeleteNetworkInterface
+                - ec2:AssignPrivateIpAddresses
+                - ec2:UnassignPrivateIpAddresses
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                - ssm:GetParameter
+                - secretsmanager:GetResourcePolicy
+                - secretsmanager:GetSecretValue
+                - secretsmanager:DescribeSecret
+                - secretsmanager:ListSecretVersionIds
+                - secretsmanager:ListSecrets
+              Effect: Allow
+              Resource: "*"
+ 
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AscendaGateway
+            Path: /roles
+            Method: GET
+
+  UpdateRoleFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
+    Properties:
+      FunctionName: "update_role"
+      # must refer to the directory containing your main package
+      CodeUri: functions/roles/update-role/
+      Handler: bootstrap
+      Policies:
+        - Statement:
+            - Action:
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DescribeSubnets
+                - ec2:DeleteNetworkInterface
+                - ec2:AssignPrivateIpAddresses
+                - ec2:UnassignPrivateIpAddresses
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                - ssm:GetParameter
+                - secretsmanager:GetResourcePolicy
+                - secretsmanager:GetSecretValue
+                - secretsmanager:DescribeSecret
+                - secretsmanager:ListSecretVersionIds
+                - secretsmanager:ListSecrets
+              Effect: Allow
+              Resource: "*"
+
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AscendaGateway
+            Path: /role
+            Method: PUT
+
+  CreateUserFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
+    Properties:
+      FunctionName: "create_user"
+      # must refer to the directory containing your main package
+      CodeUri: functions/users/create-user/
+      Handler: bootstrap
+      Policies:
+        - Statement:
+            - Action:
+                - cognito-idp:AdminCreateUser
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DescribeSubnets
+                - ec2:DeleteNetworkInterface
+                - ec2:AssignPrivateIpAddresses
+                - ec2:UnassignPrivateIpAddresses
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                - ssm:GetParameter
+                - secretsmanager:GetResourcePolicy
+                - secretsmanager:GetSecretValue
+                - secretsmanager:DescribeSecret
+                - secretsmanager:ListSecretVersionIds
+                - secretsmanager:ListSecrets
+              Effect: Allow
+              Resource: "*"
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AscendaGateway
+            Path: /user
+            Method: POST
+      Environment:
+        Variables:
+          COGNITO_USER_POOL_ID: "ap-southeast-1_3XL1JVvXg"
+
+  DeleteUserFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
+    Properties:
+      FunctionName: "delete_user"
+      # must refer to the directory containing your main package
+      CodeUri: functions/users/delete-user/
+      Handler: bootstrap
+      Policies:
+        - Statement:
+            - Action:
+                - cognito-idp:AdminDeleteUser
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DescribeSubnets
+                - ec2:DeleteNetworkInterface
+                - ec2:AssignPrivateIpAddresses
+                - ec2:UnassignPrivateIpAddresses
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                - ssm:GetParameter
+                - secretsmanager:GetResourcePolicy
+                - secretsmanager:GetSecretValue
+                - secretsmanager:DescribeSecret
+                - secretsmanager:ListSecretVersionIds
+                - secretsmanager:ListSecrets
+              Effect: Allow
+              Resource: "*"
+
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AscendaGateway
+            Path: /user
+            Method: DELETE
+      Environment:
+        Variables:
+          COGNITO_USER_POOL_ID: "ap-southeast-1_3XL1JVvXg"
+
+  GetUserFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
+    Properties:
+      FunctionName: "get_user"
+      # must refer to the directory containing your main package
+      CodeUri: functions/users/get-user/
+      Handler: bootstrap
+      Policies:
+        - Statement:
+            - Action:
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DescribeSubnets
+                - ec2:DeleteNetworkInterface
+                - ec2:AssignPrivateIpAddresses
+                - ec2:UnassignPrivateIpAddresses
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                - ssm:GetParameter
+                - secretsmanager:GetResourcePolicy
+                - secretsmanager:GetSecretValue
+                - secretsmanager:DescribeSecret
+                - secretsmanager:ListSecretVersionIds
+                - secretsmanager:ListSecrets
+              Effect: Allow
+              Resource: "*"
+
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AscendaGateway
+            Path: /user
+            Method: GET
+
+  GetUsersFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
+    Properties:
+      FunctionName: "get_users"
+      # must refer to the directory containing your main package
+      CodeUri: functions/users/get-users/
+      Handler: bootstrap
+      Policies:
+        - Statement:
+            - Action:
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DescribeSubnets
+                - ec2:DeleteNetworkInterface
+                - ec2:AssignPrivateIpAddresses
+                - ec2:UnassignPrivateIpAddresses
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                - ssm:GetParameter
+                - secretsmanager:GetResourcePolicy
+                - secretsmanager:GetSecretValue
+                - secretsmanager:DescribeSecret
+                - secretsmanager:ListSecretVersionIds
+                - secretsmanager:ListSecrets
+              Effect: Allow
+              Resource: "*"
+
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AscendaGateway
+            Path: /users
+            Method: GET
+
+  UpdateUserFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
+    Properties:
+      FunctionName: "update_user"
+      # must refer to the directory containing your main package
+      CodeUri: functions/users/update-user/
+      Handler: bootstrap
+      Policies:
+        - Statement:
+            - Action:
+                - cognito-idp:AdminUpdateUserAttributes
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DescribeSubnets
+                - ec2:DeleteNetworkInterface
+                - ec2:AssignPrivateIpAddresses
+                - ec2:UnassignPrivateIpAddresses
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                - ssm:GetParameter
+                - secretsmanager:GetResourcePolicy
+                - secretsmanager:GetSecretValue
+                - secretsmanager:DescribeSecret
+                - secretsmanager:ListSecretVersionIds
+                - secretsmanager:ListSecrets
+              Effect: Allow
+              Resource: "*"
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AscendaGateway
+            Path: /user
+            Method: PUT
+      Environment:
+        Variables:
+          COGNITO_USER_POOL_ID: "ap-southeast-1_3XL1JVvXg"
+
+  GetLogsFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
+    Properties:
+      Role: !Sub arn:aws:iam::${AWS::AccountId}:role/AscendaLambdaRole
+      FunctionName: "get_logs"
+      # must refer to the directory containing your main package
+      CodeUri: functions/logs/get-logs/
+      Handler: bootstrap
+      Policies:
+        - Statement:
+            - Action:
+                # TODO: REMOVE UNNECESSARY PERMISSIONS
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Query
+                - dynamodb:Scan
+                - dynamodb:BatchWriteItem
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DescribeSubnets
+                - ec2:DeleteNetworkInterface
+                - ec2:AssignPrivateIpAddresses
+                - ec2:UnassignPrivateIpAddresses
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                - ssm:GetParameter
+                - secretsmanager:GetResourcePolicy
+                - secretsmanager:GetSecretValue
+                - secretsmanager:DescribeSecret
+                - secretsmanager:ListSecretVersionIds
+                - secretsmanager:ListSecrets
+              Effect: Allow
+              Resource: "*"
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref AscendaGateway
+            Path: /logs
+            Method: GET
+
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  AscendaGateway:
+    Description: "API Gateway ID"
+    Value: !Ref AscendaGateway
+  # GetPointsFunction:
+  #   Description: "First Lambda Function ARN"
+  #   Value: !GetAtt GetPointsFunction.Arn

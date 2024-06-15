@@ -1,0 +1,10 @@
+.idea
+.vscode
+
+.env
+env.*.json
+env.json
+.aws-sam
+*.json
+bootstrap
+fake-login.go
